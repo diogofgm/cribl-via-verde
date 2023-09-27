@@ -1,0 +1,11 @@
+via_verde_default_index:
+  type: string
+  lib: custom
+  value: "'via_verde'"
+  description: The default index field value set in this Pack's pipelines
+  tags: viaverde
+decodeISO:
+  type: expression
+  lib: custom
+  value: TextDecoder('iso-8859-1').decode()
+  args: []

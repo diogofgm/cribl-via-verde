@@ -1,0 +1,163 @@
+output: default
+streamtags: []
+groups:
+  TlnTKW:
+    name: Fix timestamps
+    index: 6
+  xDmfyJ:
+    name: Extract timestamp
+    index: 7
+asyncFuncTimeout: 1000
+functions:
+  - id: comment
+    filter: "true"
+    disabled: null
+    conf:
+      comment: Break the XML into separate events
+  - id: xml_unroll
+    filter: "true"
+    disabled: null
+    conf:
+      unrollIdxField: unroll_idx
+      pretty: false
+      unroll: /^EXTRACTO\.IDENTIFICADOR\.TRANSACCAO$/
+      inherit: /^EXTRACTO\.(MES_EMISSAO|EXTRACTO|CLIENTE)/
+    description: Break the XML in to separate events
+  - id: comment
+    filter: "true"
+    disabled: null
+    conf:
+      comment: Parse the XML in to JSON
+  - id: eval
+    filter: "true"
+    disabled: null
+    conf:
+      add:
+        - disabled: false
+          name: _raw
+          value: C.Text.parseXml(_raw)
+        - disabled: false
+          name: _raw
+          value: _raw.TRANSACCAO
+        - disabled: false
+          name: _raw.ID
+          value: _raw.CLIENTE.id
+        - disabled: false
+          name: _raw.NIF
+          value: _raw.CLIENTE.NIF
+      remove:
+        - unroll_idx
+        - _raw.CLIENTE
+  - id: comment
+    filter: "true"
+    disabled: null
+    conf:
+      comment: Replace the decimal point from , to .
+  - id: mask
+    filter: "true"
+    disabled: null
+    conf:
+      rules:
+        - disabled: false
+          matchRegex: /(,)/
+          replaceExpr: "'.'"
+      fields:
+        - _raw.VALOR_DESCONTO
+        - _raw.IMPORTANCIA
+      depth: 5
+  - id: eval
+    filter: "true"
+    disabled: null
+    conf:
+      add:
+        - disabled: false
+          name: _raw.DATA_SAIDA
+          value: _raw.DATA_SAIDA + ' ' + _raw.HORA_SAIDA + ':00'
+        - disabled: false
+          name: _raw.DATA_ENTRADA
+          value: "_raw.DATA_ENTRADA == 'null' ? _raw.DATA_SAIDA : (_raw.DATA_ENTRADA + ' '
+            + _raw.HORA_ENTRADA + ':00') "
+      remove:
+        - _raw.HORA_*
+    groupId: TlnTKW
+  - id: auto_timestamp
+    filter: "true"
+    disabled: null
+    conf:
+      srcField: _raw.DATA_ENTRADA
+      dstField: _raw.DATA_ENTRADA
+      defaultTimezone: Europe/Lisbon
+      timeExpression: time.getTime() / 1000
+      offset: 0
+      maxLen: 150
+      defaultTime: none
+      latestDateAllowed: +1week
+      earliestDateAllowed: -420weeks
+      timestamps:
+        - regex: /(\d+-\d+-\d+ \d+:\d+:\d+)/
+          strptime: "%d-%m-%Y %H:%M:%S"
+    groupId: TlnTKW
+  - id: auto_timestamp
+    filter: "true"
+    disabled: null
+    conf:
+      srcField: _raw.DATA_SAIDA
+      dstField: _raw.DATA_SAIDA
+      defaultTimezone: Europe/Lisbon
+      timeExpression: time.getTime() / 1000
+      offset: 0
+      maxLen: 150
+      defaultTime: none
+      latestDateAllowed: +1week
+      earliestDateAllowed: -420weeks
+      timestamps:
+        - regex: /(\d+-\d+-\d+ \d+:\d+:\d+)/
+          strptime: "%d-%m-%Y %H:%M:%S"
+    groupId: TlnTKW
+  - id: eval
+    filter: "true"
+    disabled: null
+    conf:
+      add:
+        - disabled: false
+          value: _raw.DATA_ENTRADA
+          name: _time
+    groupId: xDmfyJ
+  - id: eval
+    filter: "true"
+    disabled: false
+    conf:
+      add:
+        - disabled: true
+          value: (_raw.DATA_SAIDA - _raw.DATA_ENTRADA)/60
+          name: _raw.DURACAO
+        - disabled: false
+          name: _raw.DURACAO
+          value: (_raw.DATA_SAIDA - _raw.DATA_ENTRADA)
+  - id: eval
+    filter: "true"
+    disabled: true
+    conf:
+      add:
+        - disabled: false
+          name: oper
+          value: Object.assign(encodeURIComponent(_raw.OPERADOR)).toString()
+        - disabled: false
+          name: opera
+          value: Object.assign(TextDecoder('iso-8859-1').decode(_raw.OPERADOR)).toString()
+  - id: lookup
+    filter: "true"
+    disabled: true
+    conf:
+      matchMode: exact
+      reloadPeriodSec: -1
+      addToEvent: true
+      inFields:
+        - eventField: SAIDA
+          lookupField: PORTAGEM
+      ignoreCase: true
+      matchType: first
+      file: tolls_gps.csv
+      outFields:
+        - lookupField: GPS
+          eventField: SAIDA_GPS
